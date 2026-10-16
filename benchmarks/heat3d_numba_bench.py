@@ -13,11 +13,12 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 # Default Matrix Dimensions & Block Sizes
 N     = 512
-steps = 12
+steps = 20
 dx = dy = dz = 0.01      # in meters
 dt = 0.001               # in seconds
 alpha = 1.17e-4          # Thermal diffusivity (m^2/s) - Copper
 r = alpha * dt / (dx**2) # CFL Stability Criterion for 3D: r <= 1/6 (~0.1667)
+
 
 # ---------------------------------------------------------
 # Baseline 0: Pure Python Naive Heat Equation
@@ -45,10 +46,6 @@ def solve_heat_naive_python_0(T, steps, r):
                     T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]
                                          + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
                                          + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
-
-
-        # Enforce Fixed Boundary Conditions (0°C edges)
-        # (Outer boundaries i=0, i=nx-1, j=0, etc. remain 0.0)
 
     return T_curr
 
@@ -80,17 +77,13 @@ def solve_heat_numba_1(T, steps, r):
                                          + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
                                          + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
 
-
-        # Enforce Fixed Boundary Conditions (0°C edges)
-        # (Outer boundaries i=0, i=nx-1, j=0, etc. remain 0.0)
-
     return T_curr
 
 # ---------------------------------------------------------
-# Baseline 3: Copy Buffer
+# Baseline 2: Copy Buffer
 # ---------------------------------------------------------
 @njit
-def solve_heat_copy_buffer_3(T, steps, r):
+def solve_heat_copy_buffer_2(T, steps, r):
     nx, ny, nz = T.shape
     
     # Create working buffers
@@ -108,14 +101,313 @@ def solve_heat_copy_buffer_3(T, steps, r):
 
                     T_next[i, j, k] = T_curr[i, j, k] + r * (d2T_dx2 + d2T_dy2 + d2T_dz2)
 
-        # Enforce Fixed Boundary Conditions (0°C edges)
-        # (Outer boundaries i=0, i=nx-1, j=0, etc. remain 0.0)
-
         # Swap buffers for next time step
         T_curr = T_next.copy()
 
     return T_curr
 
+# ---------------------------------------------------------
+# Baseline 3: Heat Equation in Numba with Fast Math
+# ---------------------------------------------------------
+@njit(fastmath=True)
+def solve_heat_numba_fast_math_3(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        for i in range(1, nx - 1):
+            for j in range(1, ny - 1):
+                for k in range(1, nz - 1):
+                    T_next[i, j, k] =  r * (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]
+                                         + T_curr[i, j+1, k]  - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]
+                                         + T_curr[i, j, k+1]  - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1]) + T_curr[i, j, k];
+
+        # Swap buffers for next time step
+        for i in range(1, nx - 1):
+            for j in range(1, ny - 1):
+                for k in range(1, nz - 1):
+                    T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]
+                                         + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
+                                         + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
+
+    return T_curr
+
+# ---------------------------------------------------------
+# Baseline 4: Loop order change
+# ---------------------------------------------------------
+@njit(fastmath=True)
+def solve_heat_numba_loop_change_jki_4(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        for j in range(1, ny - 1):
+            for k in range(1, nz - 1):
+                for i in range(1, nx - 1):
+                    T_next[i, j, k] =  r * (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]
+                                         + T_curr[i, j+1, k]  - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]
+                                         + T_curr[i, j, k+1]  - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1]) + T_curr[i, j, k];
+
+        # Swap buffers for next time step
+        for j in range(1, ny - 1):
+            for k in range(1, nz - 1):
+                for i in range(1, nx - 1):
+                    T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]
+                                         + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
+                                         + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
+
+    return T_curr
+
+@njit(fastmath=True)
+def solve_heat_numba_loop_change_kji_5(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        for k in range(1, nz - 1):
+            for j in range(1, ny - 1):
+                for i in range(1, nx - 1):
+                    T_next[i, j, k] =  r * (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]
+                                         + T_curr[i, j+1, k]  - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]
+                                         + T_curr[i, j, k+1]  - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1]) + T_curr[i, j, k];
+
+        # Swap buffers for next time step
+        for k in range(1, nz - 1):
+            for j in range(1, ny - 1):
+                for i in range(1, nx - 1):
+                    T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]
+                                         + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
+                                         + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
+
+    return T_curr
+
+# ---------------------------------------------------------
+# Baseline 4: Heat Equation in Numba with Parallel
+# ---------------------------------------------------------
+@njit(parallel=True, fastmath=True)
+def solve_heat_numba_parallel_6(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        for i in prange(1, nx - 1):
+            for j in range(1, ny - 1):
+                for k in range(1, nz - 1):
+                    T_next[i, j, k] =  r * (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]
+                                         + T_curr[i, j+1, k]  - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]
+                                         + T_curr[i, j, k+1]  - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1]) + T_curr[i, j, k];
+
+        # Swap buffers for next time step
+        for i in prange(1, nx - 1):
+            for j in range(1, ny - 1):
+                for k in range(1, nz - 1):
+                    T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]
+                                         + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
+                                         + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
+
+    return T_curr
+
+@njit(parallel=True, fastmath=True)
+def solve_heat_numba_parallel_7(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        for i in prange(1, nx - 1):
+            for j in prange(1, ny - 1):
+                for k in range(1, nz - 1):
+                    T_next[i, j, k] =  r * (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]
+                                         + T_curr[i, j+1, k]  - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]
+                                         + T_curr[i, j, k+1]  - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1]) + T_curr[i, j, k];
+
+        # Swap buffers for next time step
+        for i in prange(1, nx - 1):
+            for j in prange(1, ny - 1):
+                for k in range(1, nz - 1):
+                    T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]
+                                         + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
+                                         + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
+
+    return T_curr
+
+@njit(parallel=True, fastmath=True)
+def solve_heat_numba_parallel_8(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        for i in prange(1, nx - 1):
+            for j in prange(1, ny - 1):
+                for k in prange(1, nz - 1):
+                    T_next[i, j, k] =  r * (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]
+                                         + T_curr[i, j+1, k]  - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]
+                                         + T_curr[i, j, k+1]  - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1]) + T_curr[i, j, k];
+
+        # Swap buffers for next time step
+        for i in prange(1, nx - 1):
+            for j in prange(1, ny - 1):
+                for k in prange(1, nz - 1):
+                    T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]
+                                         + T_next[i, j+1, k]  - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]
+                                         + T_next[i, j, k+1]  - 2.0 * T_next[i, j, k] + T_next[i, j, k-1]) + T_next[i, j, k];
+
+    return T_curr
+
+@njit(parallel=True, fastmath=True)
+def solve_heat_tiled16_9(T, steps, r):
+
+    tile_size = 16
+    nx, ny, nz = T.shape
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    num_blocks_i = (nx - 2 + tile_size - 1) // tile_size
+
+    for step in range(steps // 2):
+        for b_i in prange(num_blocks_i):
+            ii = 1 + b_i * tile_size
+            i_max = min(ii + tile_size, nx - 1)
+            for jj in range(1, ny - 1, tile_size):
+                for kk in range(1, nz - 1, tile_size):
+                    
+                    # Compute valid tile boundaries
+                    i_max = min(ii + tile_size, nx - 1)
+                    j_max = min(jj + tile_size, ny - 1)
+                    k_max = min(kk + tile_size, nz - 1)
+                    
+                    # Inner compute block 
+                    for i in range(ii, i_max):
+                        for j in range(jj, j_max):
+                            for k in range(kk, k_max):
+                                T_next[i, j, k] = r * (
+                                    (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]) +
+                                    (T_curr[i, j+1, k] - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]) +
+                                    (T_curr[i, j, k+1] - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1])
+                                ) + T_curr[i, j, k]
+        
+        for b_i in prange(num_blocks_i):
+            ii = 1 + b_i * tile_size
+            i_max = min(ii + tile_size, nx - 1)
+            for jj in range(1, ny - 1, tile_size):
+                for kk in range(1, nz - 1, tile_size):
+                    
+                    i_max = min(ii + tile_size, nx - 1)
+                    j_max = min(jj + tile_size, ny - 1)
+                    k_max = min(kk + tile_size, nz - 1)
+                    
+                    for i in range(ii, i_max):
+                        for j in range(jj, j_max):
+                            for k in range(kk, k_max):
+                                T_curr[i, j, k] = r * (
+                                    (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]) +
+                                    (T_next[i, j+1, k] - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]) +
+                                    (T_next[i, j, k+1] - 2.0 * T_next[i, j, k] + T_next[i, j, k-1])
+                                ) + T_next[i, j, k]
+    return T_curr
+
+@njit(parallel=True, fastmath=True)
+def solve_heat_tiled32_10(T, steps, r):
+
+    tile_size = 32
+    nx, ny, nz = T.shape
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps // 2):
+        num_blocks_i = (nx - 2 + tile_size - 1) // tile_size
+        for b_i in prange(num_blocks_i):
+            ii = 1 + b_i * tile_size
+            i_max = min(ii + tile_size, nx - 1)
+            for jj in range(1, ny - 1, tile_size):
+                for kk in range(1, nz - 1, tile_size):
+                    
+                    # Compute valid tile boundaries
+                    i_max = min(ii + tile_size, nx - 1)
+                    j_max = min(jj + tile_size, ny - 1)
+                    k_max = min(kk + tile_size, nz - 1)
+                    
+                    # Inner compute block 
+                    for i in range(ii, i_max):
+                        for j in range(jj, j_max):
+                            for k in range(kk, k_max):
+                                T_next[i, j, k] = r * (
+                                    (T_curr[i+1, j, k] - 2.0 * T_curr[i, j, k] + T_curr[i-1, j, k]) +
+                                    (T_curr[i, j+1, k] - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]) +
+                                    (T_curr[i, j, k+1] - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1])
+                                ) + T_curr[i, j, k]
+
+        for b_i in prange(num_blocks_i):
+            ii = 1 + b_i * tile_size
+            i_max = min(ii + tile_size, nx - 1)
+            for jj in range(1, ny - 1, tile_size):
+                for kk in range(1, nz - 1, tile_size):
+                    
+                    i_max = min(ii + tile_size, nx - 1)
+                    j_max = min(jj + tile_size, ny - 1)
+                    k_max = min(kk + tile_size, nz - 1)
+                    
+                    for i in range(ii, i_max):
+                        for j in range(jj, j_max):
+                            for k in range(kk, k_max):
+                                T_curr[i, j, k] = r * (
+                                    (T_next[i+1, j, k] - 2.0 * T_next[i, j, k] + T_next[i-1, j, k]) +
+                                    (T_next[i, j+1, k] - 2.0 * T_next[i, j, k] + T_next[i, j-1, k]) +
+                                    (T_next[i, j, k+1] - 2.0 * T_next[i, j, k] + T_next[i, j, k-1])
+                                ) + T_next[i, j, k]
+    return T_curr
+
+@njit(fastmath=True)
+def solve_heat_numba_vectorized(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps // 2):
+        
+        C = T_curr[1:-1, 1:-1, 1:-1]
+        neighbors = (
+            T_curr[2:,   1:-1, 1:-1] + T_curr[:-2,  1:-1, 1:-1] +  # X neighbors
+            T_curr[1:-1, 2:,   1:-1] + T_curr[1:-1, :-2,  1:-1] +  # Y neighbors
+            T_curr[1:-1, 1:-1, 2:  ] + T_curr[1:-1, 1:-1, :-2]     # Z neighbors
+        )
+        T_next[1:-1, 1:-1, 1:-1] = r * (neighbors - 6.0 * C) + C
+
+        C_next = T_next[1:-1, 1:-1, 1:-1]
+        neighbors_next = (
+            T_next[2:,   1:-1, 1:-1] + T_next[:-2,  1:-1, 1:-1] +  # X neighbors
+            T_next[1:-1, 2:,   1:-1] + T_next[1:-1, :-2,  1:-1] +  # Y neighbors
+            T_next[1:-1, 1:-1, 2:  ] + T_next[1:-1, 1:-1, :-2]     # Z neighbors
+        )
+        T_curr[1:-1, 1:-1, 1:-1] = r * (neighbors_next - 6.0 * C_next) + C_next
+
+    return T_curr
 
 # ---------------------------------------------------------
 # Baseline Reference SciPy Laplace Solver
@@ -127,7 +419,6 @@ def solve_heat_scipy(T, steps, r):
         T_curr += np.dot(r, d2T)
         
     return T_curr
-
 
 # ---------------------------------------------------------
 # Execution & Benchmarking Routine
@@ -149,9 +440,9 @@ def run_benchmark(matrix_size=512):
 
     # Compute ground truth reference solution for correctness verification
     T_expected = solve_heat_scipy(T_init, steps, r)
-    total_flops = 2.0 * (N ** 3) #TODO CALCULATE TOTAL FLOPS
+    total_flops = steps * (N ** 3) * 13 
 
-    def measure(fn, reps=2):
+    def measure(fn, reps=1):
         # Correctness check against reference matrix T_expected
         T_result = fn(T_init, steps, r)
         is_correct = np.allclose(T_result, T_expected, rtol=1e-5, atol=1e-5)
@@ -160,7 +451,7 @@ def run_benchmark(matrix_size=512):
         for _ in range(reps):
             fn(T_init, steps, r)
         elapsed = (time.perf_counter() - start) / reps
-        gflops = (total_flops / elapsed) / 1e9 #TODO CALCULATE FLOPS PER SECOND ON COMPUTER
+        gflops = (total_flops / elapsed) / 345.6e9 # Ryzen 5 3600 
 
         return gflops, elapsed, is_correct
 
@@ -170,16 +461,25 @@ def run_benchmark(matrix_size=512):
     t0 = time.perf_counter()
     T_result = solve_heat_naive_python_0(T_init, steps, r)
     py_elapsed = time.perf_counter() - t0
-    py_gflops  = (2.0 * (N ** 3) / py_elapsed) / 1e9 # TODO CALCULATE
+    py_gflops  = (total_flops / py_elapsed) / 345.6e9 
     py_correct = np.allclose(T_result, T_expected, rtol=1e-5, atol=1e-5)
 
     results.append(("0_python_naive", py_gflops, py_elapsed, py_correct))
 
     # Baseline functions list
     functions = [
-        ("1_numba_niave", solve_heat_numba_1),
-        ("2_copy_buffer", solve_heat_copy_buffer_3),
-        ("10_sci_py_laplacian", solve_heat_scipy),
+        #("1_numba_niave", solve_heat_numba_1),
+        #("2_copy_buffer", solve_heat_copy_buffer_2),
+        #("3_numba_fast_math", solve_heat_numba_fast_math_3),
+        #("4_loop_change_jki", solve_heat_numba_loop_change_jki_4),
+        #("5_loop_change_kji", solve_heat_numba_loop_change_kji_5),
+        ("6_numba_parallel", solve_heat_numba_parallel_6),
+        #("7_numba_parallel", solve_heat_numba_parallel_7),
+        #("8_numba_parallel", solve_heat_numba_parallel_8),
+        #("9_tiled_16", solve_heat_tiled16_9),
+        #("10_tiled_32",  solve_heat_tiled32_10),
+        #("11_vectorized", solve_heat_numba_vectorized),
+        #("10_sci_py_laplacian", solve_heat_scipy),
     ]
 
     for name, fn in functions:
