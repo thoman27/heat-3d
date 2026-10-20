@@ -1,0 +1,57 @@
+Running Heat Equation on 3D Grid 64x64x64...
+
+| Baseline Implementation           | GFLOP/s    | Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     19.740 |      3091.14x |      3091.14x | PASS     |
+| 2_copy_buffer                     |      4.697 |       735.59x |         0.24x | PASS     |
+| 3_numba_fast_math                 |     20.634 |      3231.13x |         4.39x | PASS     |
+| 4_loop_change_jki                 |      0.114 |        17.92x |         0.01x | PASS     |
+| 5_loop_change_kji                 |      0.118 |        18.42x |         1.03x | PASS     |
+| 6_numba_parallel                  |     23.830 |      3731.72x |       202.58x | PASS     |
+| 7_numba_parallel                  |     26.651 |      4173.41x |         1.12x | PASS     |
+| 8_numba_parallel                  |     26.170 |      4098.10x |         0.98x | PASS     |
+| 9_tiled_16                        |      7.663 |      1199.91x |         0.29x | PASS     |
+| 10_tiled_32                       |      6.319 |       989.58x |         0.82x | PASS     |
+| 11_vectorized                     |      0.826 |       129.34x |         0.13x | PASS     |
+| 12_var_cache                      |     23.096 |      3616.77x |        27.96x | PASS     |
+| 13_sci_py_laplacian               |      0.561 |        87.79x |         0.02x | PASS     |
+
+Running Heat Equation on 3D Grid 128x128x128...
+
+| Baseline Implementation           | GFLOP/s    | Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     10.466 |      1746.39x |      1746.39x | PASS     |
+| 2_copy_buffer                     |      4.356 |       726.78x |         0.42x | PASS     |
+| 3_numba_fast_math                 |      9.503 |      1585.66x |         2.18x | PASS     |
+| 4_loop_change_jki                 |      0.132 |        22.02x |         0.01x | PASS     |
+| 5_loop_change_kji                 |      0.125 |        20.86x |         0.95x | PASS     |
+| 6_numba_parallel                  |     21.696 |      3620.16x |       173.53x | PASS     |
+| 7_numba_parallel                  |     24.705 |      4122.26x |         1.14x | PASS     |
+| 8_numba_parallel                  |     24.022 |      4008.34x |         0.97x | PASS     |
+| 9_tiled_16                        |      9.753 |      1627.37x |         0.41x | PASS     |
+| 10_tiled_32                       |      6.898 |      1150.94x |         0.71x | PASS     |
+| 11_vectorized                     |      0.751 |       125.24x |         0.11x | PASS     |
+| 12_var_cache                      |     25.187 |      4202.68x |        33.56x | PASS     |
+| 13_sci_py_laplacian               |      0.279 |        46.53x |         0.01x | PASS     |
+
+
+Running Heat Equation on 3D Grid 256x256x256...
+
+| Baseline Implementation           | GFLOP/s    | Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     10.010 |      1695.94x |      1695.94x | PASS     |
+| 2_copy_buffer                     |      4.206 |       712.55x |         0.42x | PASS     |
+| 3_numba_fast_math                 |     10.105 |      1712.06x |         2.40x | PASS     |
+| 4_loop_change_jki                 |      0.649 |       110.03x |         0.06x | PASS     |
+| 5_loop_change_kji                 |      0.147 |        24.90x |         0.23x | PASS     |
+| 6_numba_parallel                  |     10.695 |      1812.07x |        72.77x | PASS     |
+| 7_numba_parallel                  |     10.730 |      1817.92x |         1.00x | PASS     |
+| 8_numba_parallel                  |     10.735 |      1818.75x |         1.00x | PASS     |
+| 9_tiled_16                        |      7.780 |      1318.11x |         0.72x | PASS     |
+| 10_tiled_32                       |      8.144 |      1379.77x |         1.05x | PASS     |
+| 11_vectorized                     |      0.735 |       124.50x |         0.09x | PASS     |
+| 12_var_cache                      |     10.622 |      1799.73x |        14.46x | PASS     |
+| 13_sci_py_laplacian               |      0.425 |        72.07x |         0.04x | PASS     |

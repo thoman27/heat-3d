@@ -279,15 +279,14 @@ def solve_heat_numba_parallel_8(T, steps, r):
 
 @njit(parallel=True, fastmath=True)
 def solve_heat_tiled16_9(T, steps, r):
-
     tile_size = 16
     nx, ny, nz = T.shape
     # Create working buffers
     T_curr = T.copy()
     T_next = np.zeros((nx, ny, nz), dtype=np.float64)
-    num_blocks_i = (nx - 2 + tile_size - 1) // tile_size
 
     for step in range(steps // 2):
+        num_blocks_i = (nx - 2 + tile_size - 1) // tile_size
         for b_i in prange(num_blocks_i):
             ii = 1 + b_i * tile_size
             i_max = min(ii + tile_size, nx - 1)
@@ -308,7 +307,7 @@ def solve_heat_tiled16_9(T, steps, r):
                                     (T_curr[i, j+1, k] - 2.0 * T_curr[i, j, k] + T_curr[i, j-1, k]) +
                                     (T_curr[i, j, k+1] - 2.0 * T_curr[i, j, k] + T_curr[i, j, k-1])
                                 ) + T_curr[i, j, k]
-        
+
         for b_i in prange(num_blocks_i):
             ii = 1 + b_i * tile_size
             i_max = min(ii + tile_size, nx - 1)
@@ -382,7 +381,7 @@ def solve_heat_tiled32_10(T, steps, r):
     return T_curr
 
 @njit(fastmath=True)
-def solve_heat_numba_vectorized(T, steps, r):
+def solve_heat_numba_vectorized_11(T, steps, r):
     nx, ny, nz = T.shape
     
     # Create working buffers
@@ -410,12 +409,46 @@ def solve_heat_numba_vectorized(T, steps, r):
     return T_curr
 
 # ---------------------------------------------------------
+# Baseline 12: Heat Equation in Numba with Parallel and Var Caching
+# ---------------------------------------------------------
+@njit(parallel=True, fastmath=True)
+def solve_heat_numba_var_cache_12(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        for i in prange(1, nx - 1):
+            for j in range(1, ny - 1):
+                for k in range(1, nz - 1):
+                    sample = T_curr[i, j, k]
+                    T_next[i, j, k] =  r * (T_curr[i+1, j, k] - 2.0 * sample + T_curr[i-1, j, k]
+                                         + T_curr[i, j+1, k]  - 2.0 * sample + T_curr[i, j-1, k]
+                                         + T_curr[i, j, k+1]  - 2.0 * sample + T_curr[i, j, k-1]) + sample;
+
+        # Swap buffers for next time step
+        for i in prange(1, nx - 1):
+            for j in range(1, ny - 1):
+                for k in range(1, nz - 1):
+                    sample = T_next[i, j, k]
+                    T_curr[i, j, k] =  r * (T_next[i+1, j, k] - 2.0 * sample + T_next[i-1, j, k]
+                                         + T_next[i, j+1, k]  - 2.0 * sample + T_next[i, j-1, k]
+                                         + T_next[i, j, k+1]  - 2.0 * sample + T_next[i, j, k-1]) + sample;
+
+    return T_curr
+
+# ---------------------------------------------------------
 # Baseline Reference SciPy Laplace Solver
 # ---------------------------------------------------------
 def solve_heat_scipy(T, steps, r):
     T_curr = T.copy()
+    d2T = np.empty_like(T_curr)
+
     for _ in range(steps):
-        d2T = laplace(T_curr, mode='constant', cval=0.0)
+        d2T = laplace(T_curr, output=d2T, mode='constant', cval=0.0)
         T_curr += np.dot(r, d2T)
         
     return T_curr
@@ -451,7 +484,7 @@ def run_benchmark(matrix_size=512):
         for _ in range(reps):
             fn(T_init, steps, r)
         elapsed = (time.perf_counter() - start) / reps
-        gflops = (total_flops / elapsed) / 345.6e9 # Ryzen 5 3600 
+        gflops = (total_flops / elapsed) / 1e9 
 
         return gflops, elapsed, is_correct
 
@@ -461,25 +494,26 @@ def run_benchmark(matrix_size=512):
     t0 = time.perf_counter()
     T_result = solve_heat_naive_python_0(T_init, steps, r)
     py_elapsed = time.perf_counter() - t0
-    py_gflops  = (total_flops / py_elapsed) / 345.6e9 
+    py_gflops  = (total_flops / py_elapsed) / 1e9 
     py_correct = np.allclose(T_result, T_expected, rtol=1e-5, atol=1e-5)
 
     results.append(("0_python_naive", py_gflops, py_elapsed, py_correct))
 
     # Baseline functions list
     functions = [
-        #("1_numba_niave", solve_heat_numba_1),
-        #("2_copy_buffer", solve_heat_copy_buffer_2),
-        #("3_numba_fast_math", solve_heat_numba_fast_math_3),
-        #("4_loop_change_jki", solve_heat_numba_loop_change_jki_4),
-        #("5_loop_change_kji", solve_heat_numba_loop_change_kji_5),
+        ("1_numba_niave", solve_heat_numba_1),
+        ("2_copy_buffer", solve_heat_copy_buffer_2),
+        ("3_numba_fast_math", solve_heat_numba_fast_math_3),
+        ("4_loop_change_jki", solve_heat_numba_loop_change_jki_4),
+        ("5_loop_change_kji", solve_heat_numba_loop_change_kji_5),
         ("6_numba_parallel", solve_heat_numba_parallel_6),
-        #("7_numba_parallel", solve_heat_numba_parallel_7),
-        #("8_numba_parallel", solve_heat_numba_parallel_8),
-        #("9_tiled_16", solve_heat_tiled16_9),
-        #("10_tiled_32",  solve_heat_tiled32_10),
-        #("11_vectorized", solve_heat_numba_vectorized),
-        #("10_sci_py_laplacian", solve_heat_scipy),
+        ("7_numba_parallel", solve_heat_numba_parallel_7),
+        ("8_numba_parallel", solve_heat_numba_parallel_8),
+        ("9_tiled_16", solve_heat_tiled16_9),
+        ("10_tiled_32",  solve_heat_tiled32_10),
+        ("11_vectorized", solve_heat_numba_vectorized_11),
+        ("12_var_cache", solve_heat_numba_var_cache_12),
+        ("13_sci_py_laplacian", solve_heat_scipy),
     ]
 
     for name, fn in functions:
@@ -493,7 +527,7 @@ def run_benchmark(matrix_size=512):
 # ---------------------------------------------------------
 if __name__ == "__main__":
     # Get user input for matrix dimension N
-    N_input = 256
+    N_input = 512
     if len(sys.argv) > 1:
         try:
             N_input = int(sys.argv[1])
