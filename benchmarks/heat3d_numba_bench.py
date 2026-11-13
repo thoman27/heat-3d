@@ -13,7 +13,7 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 # Default Matrix Dimensions & Block Sizes
 N     = 512
-steps = 100 #TODO MAKE 20 AGAIN
+steps = 100 
 dx = dy = dz = 0.01      # in meters
 dt = 0.001               # in seconds
 alpha = 1.17e-4          # Thermal diffusivity (m^2/s) - Copper
@@ -166,6 +166,47 @@ def solve_heat_numba_caching_1(T, steps, r):
 
     if (steps % 2 == 1):
         step_cache(T_curr, T_next, r)
+        return T_next
+
+    return T_curr
+
+@njit(inline="always", fastmath=False)
+def step_unroll(T_in, T_out, r):
+    nx, ny, nz = T_in.shape
+    for i in range(1, nx - 1):
+        for j in range(1, ny - 1):  
+            k_prev = T_in[i, j, 0] 
+            k_curr = T_in[i, j, 1]      
+            for k in range(1, nz - 1, 2):
+                k_next = T_in[i, j, k + 1]
+                k_next_next = T_in[i, j, k + 2]
+
+                T_out[i, j, k] =  r * (T_in[i+1, j, k] - 2.0 * k_curr + T_in[i-1, j, k]
+                                     + T_in[i, j+1, k]  - 2.0 * k_curr + T_in[i, j-1, k]
+                                     + k_next  - 2.0 * k_curr + k_prev) + k_curr;
+
+                T_out[i, j, k+1] =  r * (T_in[i+1, j, k+1] - 2.0 * k_next + T_in[i-1, j, k+1]
+                                      + T_in[i, j+1, k+1]  - 2.0 * k_next + T_in[i, j-1, k+1]
+                                      + k_next_next  - 2.0 * k_next + k_curr) + k_next;
+
+                k_curr = k_next_next #Assumes even grid
+                k_prev = k_next
+
+@njit
+def solve_heat_numba_unroll(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    # Create working buffers
+    T_curr = T.copy()
+    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+
+    for step in range(steps//2):
+        # Explicit 3D Finite Difference via 3-level nested loops
+        step_unroll(T_curr, T_next, r)
+        step_unroll(T_next, T_curr, r)
+
+    if (steps % 2 == 1):
+        step_unroll(T_curr, T_next, r)
         return T_next
 
     return T_curr
@@ -392,6 +433,129 @@ def solve_heat_numba_tiling_ij(T, steps, r):
 
     if steps % 2 == 1:
         step_tiled_ij(T_curr, T_next, r)
+        return T_next
+
+    return T_curr
+
+def solve_heat_numba_tiling_ij32(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    T_curr = T.copy()
+    T_next = T.copy()
+
+    for _ in range(steps // 2):
+        step_tiled_ij(T_curr, T_next, r, 32)
+        step_tiled_ij(T_next, T_curr, r, 32)
+
+    if steps % 2 == 1:
+        step_tiled_ij(T_curr, T_next, r, 32)
+        return T_next
+
+    return T_curr
+
+def solve_heat_numba_tiling_ij(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    T_curr = T.copy()
+    T_next = T.copy()
+
+    for _ in range(steps // 2):
+        step_tiled_ij(T_curr, T_next, r)
+        step_tiled_ij(T_next, T_curr, r)
+
+    if steps % 2 == 1:
+        step_tiled_ij(T_curr, T_next, r)
+        return T_next
+
+    return T_curr
+
+@njit(inline="always", fastmath=False)
+def step_tiled_ijk(T_in, T_out, r, tile=64, tile_k=64):
+    nx, ny, nz = T_in.shape
+    
+    for i0 in range(1, nx - 1, tile):
+        i1 = min(i0 + tile, nx - 1)
+        for j0 in range(1, ny - 1, tile):
+            j1 = min(j0 + tile, ny - 1)
+            for k0 in range(1, nz - 1, tile_k):
+                k1 = min(k0 + tile_k, nz - 1)
+
+                for i in range(i0, i1):
+                    for j in range(j0, j1):
+                        k_prev = T_in[i, j, k0 - 1]
+                        k_curr = T_in[i, j, k0]
+                    
+                        for k in range(k0, k1):
+                            k_next = T_in[i, j, k + 1]
+                            T_out[i, j, k] = r * (
+                                T_in[i + 1, j, k] - 2.0 * k_curr + T_in[i - 1, j, k]
+                                + T_in[i, j + 1, k] - 2.0 * k_curr + T_in[i, j - 1, k]
+                                + k_next - 2.0 * k_curr + k_prev
+                            ) + k_curr
+                            
+                            k_prev = k_curr
+                            k_curr = k_next
+
+def solve_heat_numba_tiling_ijk32(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    T_curr = T.copy()
+    T_next = T.copy()
+
+    for _ in range(steps // 2):
+        step_tiled_ijk(T_curr, T_next, r, 32, 32)
+        step_tiled_ijk(T_next, T_curr, r, 32, 32)
+
+    if steps % 2 == 1:
+        step_tiled_ijk(T_curr, T_next, r, 32, 32)
+        return T_next
+
+    return T_curr
+
+def solve_heat_numba_tiling_ij16k32(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    T_curr = T.copy()
+    T_next = T.copy()
+
+    for _ in range(steps // 2):
+        step_tiled_ijk(T_curr, T_next, r, 16, 32)
+        step_tiled_ijk(T_next, T_curr, r, 16, 32)
+
+    if steps % 2 == 1:
+        step_tiled_ijk(T_curr, T_next, r, 16, 32)
+        return T_next
+
+    return T_curr
+
+def solve_heat_numba_tiling_ij16k64(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    T_curr = T.copy()
+    T_next = T.copy()
+
+    for _ in range(steps // 2):
+        step_tiled_ijk(T_curr, T_next, r, 16, 64)
+        step_tiled_ijk(T_next, T_curr, r, 16, 64)
+
+    if steps % 2 == 1:
+        step_tiled_ijk(T_curr, T_next, r, 16, 64)
+        return T_next
+
+    return T_curr
+
+def solve_heat_numba_tiling_ij8k32(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    T_curr = T.copy()
+    T_next = T.copy()
+
+    for _ in range(steps // 2):
+         step_tiled_ijk(T_curr, T_next, r, 8, 32)
+         step_tiled_ijk(T_next, T_curr, r, 8, 32)
+
+    if steps % 2 == 1:
+        step_tiled_ijk(T_curr, T_next, r, 8, 32)
         return T_next
 
     return T_curr
@@ -661,8 +825,50 @@ def solve_heat_numba_vectorized_11(T, steps, r):
 
     return T_curr
 
+@njit(inline="always", parallel=True, fastmath=False)
+def step_tiled_parallel(T_in, T_out, r, tile=64, tile_k=64):
+    nx, ny, nz = T_in.shape
+    
+    # Outer loops define the 3D tile coordinates (i0, j0, k0)
+    for i0 in range(1, nx - 1, tile):
+        i1 = min(i0 + tile, nx - 1)
+        for j0 in range(1, ny - 1, tile):
+            j1 = min(j0 + tile, ny - 1)
+            for k0 in range(1, nz - 1, tile_k):
+                k1 = min(k0 + tile_k, nz - 1)
 
-# Define the 3D 7-point stencil kernel
+                for i in prange(i0, i1):
+                    for j in range(j0, j1):
+                        k_prev = T_in[i, j, k0 - 1]
+                        k_curr = T_in[i, j, k0]
+                    
+                        for k in range(k0, k1):
+                            k_next = T_in[i, j, k + 1]
+                            T_out[i, j, k] = r * (
+                                T_in[i + 1, j, k] - 2.0 * k_curr + T_in[i - 1, j, k]
+                                + T_in[i, j + 1, k] - 2.0 * k_curr + T_in[i, j - 1, k]
+                                + k_next - 2.0 * k_curr + k_prev
+                            ) + k_curr
+                            
+                            k_prev = k_curr
+                            k_curr = k_next
+
+def solve_heat_numba_tiling_parallel(T, steps, r):
+    nx, ny, nz = T.shape
+    
+    T_curr = T.copy()
+    T_next = T.copy()
+
+    for _ in range(steps // 2):
+        step_tiled_parallel(T_curr, T_next, r, 8, 32)
+        step_tiled_parallel(T_next, T_curr, r, 8, 32)
+
+    if steps % 2 == 1:
+        step_tiled_parallel(T_curr, T_next, r, 8, 32)
+        return T_next
+
+    return T_curr
+
 @stencil
 def heat_kernel(arr, r):
     return r * (
@@ -683,6 +889,10 @@ def solve_heat_numba_stencil(T, steps, r):
         # Apply stencil with pre-allocated output buffers using 'out='
         heat_kernel(T_curr, r, out=T_next)
         heat_kernel(T_next, r, out=T_curr)
+
+    if (steps % 2):
+        heat_kernel(T_curr, r, out=T_next)
+        return T_next
 
     return T_curr
 
@@ -718,24 +928,16 @@ def run_benchmark(matrix_size=512):
                     T_init[i, j, k] = 100.0
 
     # Cannot run ground truth at reduced grid since memory is predominant 
-    # bottleneck. Save defaults for faster testing
-    # Compute ground truth reference solution for correctness verification
-    # 0. Pure Python (Run on a smaller dimension if N is large to prevent lockups)
+    # bottleneck. Instead run fewer steps
     N_py = N
-    center = N//2
-    half   = N_py // 2
-    T_reduced =  T_init[
-        center - half : center + half,
-        center - half : center + half,
-        center - half : center + half
-    ].copy()
+    T_reduced =  T_init.copy()
 
     T_expected = solve_heat_scipy(T_init, steps, r)
     total_flops_reduced = 1 * (N_py ** 3) * 13  #Do just one step for unoptimized program
     T_expected_reduced = solve_heat_scipy(T_reduced, 1, r)
     total_flops = steps * (N ** 3) * 13 
-
-    def measure(fn, reps=3):
+ 
+    def measure(fn, reps=5):
         # Correctness check against reference matrix T_expected
         T_result = fn(T_init, steps, r)
         is_correct = np.allclose(T_result, T_expected, rtol=1e-5, atol=1e-5)
@@ -765,26 +967,31 @@ def run_benchmark(matrix_size=512):
         ("1_numba_niave", solve_heat_numba_1),
         ("2_numba_reduced_op", solve_heat_numba_reduce_op_1),
         ("3_numba_fast_math", solve_heat_numba_fast_math_3),
-        ("3_copy_buffer", solve_heat_copy_buffer_2),
-        ("4_numba_cached", solve_heat_numba_caching_1),
-        ("5_numba_tiling_i16", solve_heat_numba_tiling_i_16),
-        ("5_numba_tiling_i32", solve_heat_numba_tiling_i_32),
-        ("5_numba_tiling_i64", solve_heat_numba_tiling_i_64),
-        ("6_numba_tiling_j16", solve_heat_numba_tiling_j16),
-        ("6_numba_tiling_j32", solve_heat_numba_tiling_j32),
-        ("6_numba_tiling_j64", solve_heat_numba_tiling_j64),
-        ("6_numba_tiling_ij16", solve_heat_numba_tiling_ij16),
-        ("6_numba_tiling_ij32", solve_heat_numba_tiling_ij32),
-        ("6_numba_tiling_ij64", solve_heat_numba_tiling_ij),
-        ("7_loop_change_jki", solve_heat_numba_loop_change_jki_4),
-        ("8_loop_change_kji", solve_heat_numba_loop_change_kji),
-        ("9_numba_parallel", solve_heat_numba_parallel_6),
-        ("10_numba_parallel", solve_heat_numba_parallel_7),
-        ("8_numba_parallel", solve_heat_numba_parallel_8),
-        ("8_parallel_tiling", solve_heat_numba_parallel_8),
-        ("11_vectorized", solve_heat_numba_vectorized_11),
-        ("13_stencil_kernel", solve_heat_numba_stencil),
-        ("13_sci_py_laplacian", solve_heat_scipy),
+        ("4_copy_buffer", solve_heat_copy_buffer_2),
+        ("5_numba_cached", solve_heat_numba_caching_1),
+        ("6_unrolled",     solve_heat_numba_unroll),
+        ("7_numba_tiling_i16", solve_heat_numba_tiling_i_16),
+        ("8_numba_tiling_i32", solve_heat_numba_tiling_i_32),
+        ("9_numba_tiling_i64", solve_heat_numba_tiling_i_64),
+        ("10_numba_tiling_j16", solve_heat_numba_tiling_j16),
+        ("11_numba_tiling_j32", solve_heat_numba_tiling_j32),
+        ("12_numba_tiling_j64", solve_heat_numba_tiling_j64),
+        ("13_numba_tiling_ij16", solve_heat_numba_tiling_ij16),
+        ("14_numba_tiling_ij32", solve_heat_numba_tiling_ij32),
+        ("15_numba_tiling_ij64", solve_heat_numba_tiling_ij),
+        ("16_numba_tiling_ijk32", solve_heat_numba_tiling_ijk32),
+        ("17_numba_tiling_ij16k32", solve_heat_numba_tiling_ij16k32),
+        ("18_numba_tiling_ij16k64", solve_heat_numba_tiling_ij16k64),
+        ("19_numba_tiling_ij8k32", solve_heat_numba_tiling_ij8k32),
+        ("20_loop_change_jki", solve_heat_numba_loop_change_jki_4),
+        ("21_loop_change_kji", solve_heat_numba_loop_change_kji),
+        ("22_numba_parallel", solve_heat_numba_parallel_6),
+        ("23_numba_parallel", solve_heat_numba_parallel_7),
+        ("24_numba_parallel", solve_heat_numba_parallel_8),
+        ("25_parallel_tiling", solve_heat_numba_tiling_parallel),
+        ("26_vectorized", solve_heat_numba_vectorized_11),
+        ("27_stencil_kernel", solve_heat_numba_stencil),
+        ("28_sci_py_laplacian", solve_heat_scipy),
     ]
 
     for name, fn in functions:
