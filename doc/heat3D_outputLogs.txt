@@ -1,57 +1,216 @@
 Running Heat Equation on 3D Grid 64x64x64...
 
-| Baseline Implementation           | GFLOP/s    | Abs Speedup  | Rel Speedup  | Correct  |
-| :---| :---| :---| :---| :--- |
-| 0_python_naive                    |      0.006 |         1.00x |         1.00x | PASS     |
-| 1_numba_niave                     |     19.740 |      3091.14x |      3091.14x | PASS     |
-| 2_copy_buffer                     |      4.697 |       735.59x |         0.24x | PASS     |
-| 3_numba_fast_math                 |     20.634 |      3231.13x |         4.39x | PASS     |
-| 4_loop_change_jki                 |      0.114 |        17.92x |         0.01x | PASS     |
-| 5_loop_change_kji                 |      0.118 |        18.42x |         1.03x | PASS     |
-| 6_numba_parallel                  |     23.830 |      3731.72x |       202.58x | PASS     |
-| 7_numba_parallel                  |     26.651 |      4173.41x |         1.12x | PASS     |
-| 8_numba_parallel                  |     26.170 |      4098.10x |         0.98x | PASS     |
-| 9_tiled_16                        |      7.663 |      1199.91x |         0.29x | PASS     |
-| 10_tiled_32                       |      6.319 |       989.58x |         0.82x | PASS     |
-| 11_vectorized                     |      0.826 |       129.34x |         0.13x | PASS     |
-| 12_var_cache                      |     23.096 |      3616.77x |        27.96x | PASS     |
-| 13_sci_py_laplacian               |      0.561 |        87.79x |         0.02x | PASS     |
+| Baseline Implementation           | GFLOP/s    | Time (s)     |Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |     54.422 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     24.542 |      0.014 |      3919.29x |      3919.29x | PASS     |
+| 2_numba_reduced_op                |     24.598 |      0.014 |      3928.27x |         1.00x | PASS     |
+| 3_numba_fast_math                 |     26.233 |      0.013 |      4189.31x |         1.07x | PASS     |
+| 4_copy_buffer                     |      4.555 |      0.075 |       727.49x |         0.17x | PASS     |
+| 5_numba_cached                    |     20.352 |      0.017 |      3250.20x |         4.47x | PASS     |
+| 6_unrolled                        |      7.720 |      0.044 |      1232.89x |         0.38x | PASS     |
+| 7_numba_tiling_i16                |     19.908 |      0.017 |      3179.20x |         2.58x | PASS     |
+| 8_numba_tiling_i32                |     19.846 |      0.017 |      3169.37x |         1.00x | PASS     |
+| 9_numba_tiling_i64                |     20.005 |      0.017 |      3194.79x |         1.01x | PASS     |
+| 10_numba_tiling_j16               |     18.933 |      0.018 |      3023.46x |         0.95x | PASS     |
+| 11_numba_tiling_j32               |     18.933 |      0.018 |      3023.59x |         1.00x | PASS     |
+| 12_numba_tiling_j64               |     19.146 |      0.018 |      3057.54x |         1.01x | PASS     |
+| 13_numba_tiling_ij16              |     18.312 |      0.019 |      2924.43x |         0.96x | PASS     |
+| 14_numba_tiling_ij32              |     17.726 |      0.019 |      2830.77x |         0.97x | PASS     |
+| 15_numba_tiling_ij64              |     17.887 |      0.019 |      2856.48x |         1.01x | PASS     |
+| 16_numba_tiling_ijk32             |      5.511 |      0.062 |       880.11x |         0.31x | PASS     |
+| 17_numba_tiling_ij16k32           |      5.588 |      0.061 |       892.44x |         1.01x | PASS     |
+| 18_numba_tiling_ij16k64           |      6.495 |      0.052 |      1037.27x |         1.16x | PASS     |
+| 19_numba_tiling_ij8k32            |      5.647 |      0.060 |       901.84x |         0.87x | PASS     |
+| 20_loop_change_jki                |      0.212 |      1.609 |        33.82x |         0.04x | PASS     |
+| 21_loop_change_kji                |      0.223 |      1.525 |        35.68x |         1.05x | PASS     |
+| 22_numba_parallel                 |     46.831 |      0.007 |      7478.77x |       209.61x | PASS     |
+| 23_numba_parallel                 |     42.905 |      0.008 |      6851.79x |         0.92x | PASS     |
+| 24_numba_parallel                 |     47.986 |      0.007 |      7663.16x |         1.12x | PASS     |
+| 25_parallel_tiling                |      3.081 |      0.111 |       491.97x |         0.06x | PASS     |
+| 26_vectorized                     |      0.855 |      0.399 |       136.50x |         0.28x | PASS     |
+| 27_temporal_tiling_2_steps        |      9.147 |      0.037 |      1460.73x |        10.70x | FAIL     |
+| 29_stencil_kernel                 |     12.472 |      0.027 |      1991.73x |         1.36x | PASS     |
+| 30_sci_py_laplacian               |      0.402 |      0.848 |        64.16x |         0.03x | PASS     |
+| 31_pypde                          |      0.290 |      1.177 |        46.24x |         0.72x | PASS     |
 
 Running Heat Equation on 3D Grid 128x128x128...
 
-| Baseline Implementation           | GFLOP/s    | Abs Speedup  | Rel Speedup  | Correct  |
-| :---| :---| :---| :---| :--- |
-| 0_python_naive                    |      0.006 |         1.00x |         1.00x | PASS     |
-| 1_numba_niave                     |     10.466 |      1746.39x |      1746.39x | PASS     |
-| 2_copy_buffer                     |      4.356 |       726.78x |         0.42x | PASS     |
-| 3_numba_fast_math                 |      9.503 |      1585.66x |         2.18x | PASS     |
-| 4_loop_change_jki                 |      0.132 |        22.02x |         0.01x | PASS     |
-| 5_loop_change_kji                 |      0.125 |        20.86x |         0.95x | PASS     |
-| 6_numba_parallel                  |     21.696 |      3620.16x |       173.53x | PASS     |
-| 7_numba_parallel                  |     24.705 |      4122.26x |         1.14x | PASS     |
-| 8_numba_parallel                  |     24.022 |      4008.34x |         0.97x | PASS     |
-| 9_tiled_16                        |      9.753 |      1627.37x |         0.41x | PASS     |
-| 10_tiled_32                       |      6.898 |      1150.94x |         0.71x | PASS     |
-| 11_vectorized                     |      0.751 |       125.24x |         0.11x | PASS     |
-| 12_var_cache                      |     25.187 |      4202.68x |        33.56x | PASS     |
-| 13_sci_py_laplacian               |      0.279 |        46.53x |         0.01x | PASS     |
-
+| Baseline Implementation           | GFLOP/s    | Time (s)     |Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |    447.232 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     11.903 |      0.229 |      1952.66x |      1952.66x | PASS     |
+| 2_numba_reduced_op                |     11.890 |      0.229 |      1950.51x |         1.00x | PASS     |
+| 3_numba_fast_math                 |     12.091 |      0.225 |      1983.47x |         1.02x | PASS     |
+| 4_copy_buffer                     |      4.328 |      0.630 |       709.96x |         0.36x | PASS     |
+| 5_numba_cached                    |     12.040 |      0.226 |      1975.16x |         2.78x | PASS     |
+| 6_unrolled                        |      7.029 |      0.388 |      1153.14x |         0.58x | PASS     |
+| 7_numba_tiling_i16                |     11.856 |      0.230 |      1944.96x |         1.69x | PASS     |
+| 8_numba_tiling_i32                |     12.073 |      0.226 |      1980.47x |         1.02x | PASS     |
+| 9_numba_tiling_i64                |     12.061 |      0.226 |      1978.52x |         1.00x | PASS     |
+| 10_numba_tiling_j16               |     12.373 |      0.220 |      2029.69x |         1.03x | PASS     |
+| 11_numba_tiling_j32               |     12.370 |      0.220 |      2029.25x |         1.00x | PASS     |
+| 12_numba_tiling_j64               |     12.268 |      0.222 |      2012.55x |         0.99x | PASS     |
+| 13_numba_tiling_ij16              |     12.240 |      0.223 |      2007.89x |         1.00x | PASS     |
+| 14_numba_tiling_ij32              |     12.184 |      0.224 |      1998.64x |         1.00x | PASS     |
+| 15_numba_tiling_ij64              |     12.281 |      0.222 |      2014.65x |         1.01x | PASS     |
+| 16_numba_tiling_ijk32             |      2.883 |      0.946 |       472.96x |         0.23x | PASS     |
+| 17_numba_tiling_ij16k32           |      2.846 |      0.958 |       466.88x |         0.99x | PASS     |
+| 18_numba_tiling_ij16k64           |      4.624 |      0.590 |       758.62x |         1.62x | PASS     |
+| 19_numba_tiling_ij8k32            |      3.185 |      0.856 |       522.44x |         0.69x | PASS     |
+| 20_loop_change_jki                |      0.426 |      6.401 |        69.87x |         0.13x | PASS     |
+| 21_loop_change_kji                |      0.431 |      6.318 |        70.78x |         1.01x | PASS     |
+| 22_numba_parallel                 |     36.073 |      0.076 |      5917.58x |        83.60x | PASS     |
+| 23_numba_parallel                 |     33.549 |      0.081 |      5503.51x |         0.93x | PASS     |
+| 24_numba_parallel                 |     32.707 |      0.083 |      5365.35x |         0.97x | PASS     |
+| 25_parallel_tiling                |      2.631 |      1.036 |       431.57x |         0.08x | PASS     |
+| 26_vectorized                     |      0.782 |      3.485 |       128.34x |         0.30x | PASS     |
+| 27_temporal_tiling_2_steps        |      4.476 |      0.609 |       734.28x |         5.72x | FAIL     |
+| 29_stencil_kernel                 |     11.201 |      0.243 |      1837.53x |         2.50x | PASS     |
+| 30_sci_py_laplacian               |      0.496 |      5.492 |        81.43x |         0.04x | PASS     |
+| 31_pypde                          |      0.725 |      3.760 |       118.95x |         1.46x | PASS     |
 
 Running Heat Equation on 3D Grid 256x256x256...
 
-| Baseline Implementation           | GFLOP/s    | Abs Speedup  | Rel Speedup  | Correct  |
-| :---| :---| :---| :---| :--- |
-| 0_python_naive                    |      0.006 |         1.00x |         1.00x | PASS     |
-| 1_numba_niave                     |     10.010 |      1695.94x |      1695.94x | PASS     |
-| 2_copy_buffer                     |      4.206 |       712.55x |         0.42x | PASS     |
-| 3_numba_fast_math                 |     10.105 |      1712.06x |         2.40x | PASS     |
-| 4_loop_change_jki                 |      0.649 |       110.03x |         0.06x | PASS     |
-| 5_loop_change_kji                 |      0.147 |        24.90x |         0.23x | PASS     |
-| 6_numba_parallel                  |     10.695 |      1812.07x |        72.77x | PASS     |
-| 7_numba_parallel                  |     10.730 |      1817.92x |         1.00x | PASS     |
-| 8_numba_parallel                  |     10.735 |      1818.75x |         1.00x | PASS     |
-| 9_tiled_16                        |      7.780 |      1318.11x |         0.72x | PASS     |
-| 10_tiled_32                       |      8.144 |      1379.77x |         1.05x | PASS     |
-| 11_vectorized                     |      0.735 |       124.50x |         0.09x | PASS     |
-| 12_var_cache                      |     10.622 |      1799.73x |        14.46x | PASS     |
-| 13_sci_py_laplacian               |      0.425 |        72.07x |         0.04x | PASS     |
+| Baseline Implementation           | GFLOP/s    | Time (s)     |Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |   3655.609 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     11.957 |      1.824 |      2004.14x |      2004.14x | PASS     |
+| 2_numba_reduced_op                |     12.031 |      1.813 |      2016.46x |         1.01x | PASS     |
+| 3_numba_fast_math                 |     12.288 |      1.775 |      2059.56x |         1.02x | PASS     |
+| 4_copy_buffer                     |      4.374 |      4.987 |       733.05x |         0.36x | PASS     |
+| 5_numba_cached                    |     12.300 |      1.773 |      2061.66x |         2.81x | PASS     |
+| 6_unrolled                        |      6.875 |      3.172 |      1152.30x |         0.56x | PASS     |
+| 7_numba_tiling_i16                |     12.293 |      1.774 |      2060.40x |         1.79x | PASS     |
+| 8_numba_tiling_i32                |     12.324 |      1.770 |      2065.61x |         1.00x | PASS     |
+| 9_numba_tiling_i64                |     12.307 |      1.772 |      2062.69x |         1.00x | PASS     |
+| 10_numba_tiling_j16               |     10.896 |      2.002 |      1826.19x |         0.89x | PASS     |
+| 11_numba_tiling_j32               |     11.537 |      1.891 |      1933.66x |         1.06x | PASS     |
+| 12_numba_tiling_j64               |     11.792 |      1.850 |      1976.41x |         1.02x | PASS     |
+| 13_numba_tiling_ij16              |     11.823 |      1.845 |      1981.57x |         1.00x | PASS     |
+| 14_numba_tiling_ij32              |     11.870 |      1.837 |      1989.51x |         1.00x | PASS     |
+| 15_numba_tiling_ij64              |     11.624 |      1.876 |      1948.25x |         0.98x | PASS     |
+| 16_numba_tiling_ijk32             |      3.176 |      6.868 |       532.26x |         0.27x | PASS     |
+| 17_numba_tiling_ij16k32           |      3.120 |      6.991 |       522.89x |         0.98x | PASS     |
+| 18_numba_tiling_ij16k64           |      3.901 |      5.591 |       653.86x |         1.25x | PASS     |
+| 19_numba_tiling_ij8k32            |      3.449 |      6.324 |       578.03x |         0.88x | PASS     |
+| 20_loop_change_jki                |      0.665 |     32.798 |       111.46x |         0.19x | PASS     |
+| 21_loop_change_kji                |      0.363 |     60.122 |        60.80x |         0.55x | PASS     |
+| 22_numba_parallel                 |     12.113 |      1.801 |      2030.25x |        33.39x | PASS     |
+| 23_numba_parallel                 |     12.103 |      1.802 |      2028.58x |         1.00x | PASS     |
+| 24_numba_parallel                 |     12.134 |      1.798 |      2033.69x |         1.00x | PASS     |
+| 25_parallel_tiling                |      2.704 |      8.066 |       453.23x |         0.22x | PASS     |
+| 26_vectorized                     |      0.774 |     28.193 |       129.66x |         0.29x | PASS     |
+| 27_temporal_tiling_2_steps        |      4.714 |      4.627 |       790.13x |         6.09x | FAIL     |
+| 29_stencil_kernel                 |     10.312 |      2.115 |      1728.43x |         2.19x | PASS     |
+| 30_sci_py_laplacian               |      0.397 |     54.877 |        66.61x |         0.04x | PASS     |
+| 31_pypde                          |      1.008 |     21.648 |       168.87x |         2.54x | PASS     |
+
+Running Heat Equation on 3D Grid 64x64x64...
+
+| Baseline Implementation           | GFLOP/s    | Time (s)     |Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |     59.708 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     13.930 |      0.024 |      2440.62x |      2440.62x | PASS     |
+| 2_numba_reduced_op                |     22.223 |      0.015 |      3893.66x |         1.60x | PASS     |
+| 3_numba_fast_math                 |     17.472 |      0.020 |      3061.25x |         0.79x | PASS     |
+| 4_copy_buffer                     |      7.057 |      0.048 |      1236.48x |         0.40x | PASS     |
+| 5_numba_cached                    |     14.123 |      0.024 |      2474.53x |         2.00x | PASS     |
+| 6_unrolled                        |      4.973 |      0.069 |       871.38x |         0.35x | PASS     |
+| 7_numba_tiling_i16                |     14.191 |      0.024 |      2486.38x |         2.85x | PASS     |
+| 8_numba_tiling_i32                |     14.236 |      0.024 |      2494.23x |         1.00x | PASS     |
+| 9_numba_tiling_i64                |     14.219 |      0.024 |      2491.22x |         1.00x | PASS     |
+| 10_numba_tiling_j16               |     13.618 |      0.025 |      2386.03x |         0.96x | PASS     |
+| 11_numba_tiling_j32               |     13.745 |      0.025 |      2408.23x |         1.01x | PASS     |
+| 12_numba_tiling_j64               |     13.771 |      0.025 |      2412.77x |         1.00x | PASS     |
+| 13_numba_tiling_ij16              |     13.320 |      0.026 |      2333.81x |         0.97x | PASS     |
+| 14_numba_tiling_ij32              |     13.227 |      0.026 |      2317.39x |         0.99x | PASS     |
+| 15_numba_tiling_ij64              |     13.316 |      0.026 |      2333.03x |         1.01x | PASS     |
+| 16_numba_tiling_ijk32             |      5.037 |      0.068 |       882.59x |         0.38x | PASS     |
+| 17_numba_tiling_ij16k32           |      5.050 |      0.067 |       884.72x |         1.00x | PASS     |
+| 18_numba_tiling_ij16k64           |      5.648 |      0.060 |       989.56x |         1.12x | PASS     |
+| 19_numba_tiling_ij8k32            |      5.020 |      0.068 |       879.62x |         0.89x | PASS     |
+| 20_loop_change_jki                |      0.299 |      1.139 |        52.41x |         0.06x | PASS     |
+| 21_loop_change_kji                |      0.301 |      1.132 |        52.75x |         1.01x | PASS     |
+| 22_numba_parallel                 |     55.760 |      0.006 |      9769.48x |       185.22x | PASS     |
+| 23_numba_parallel                 |     55.461 |      0.006 |      9717.06x |         0.99x | PASS     |
+| 24_numba_parallel                 |     63.739 |      0.005 |     11167.47x |         1.15x | PASS     |
+| 25_parallel_tiling                |      3.192 |      0.107 |       559.30x |         0.05x | PASS     |
+| 26_vectorized                     |      0.913 |      0.373 |       159.91x |         0.29x | PASS     |
+| 27_temporal_tiling_2_steps        |      7.146 |      0.048 |      1251.97x |         7.83x | FAIL     |
+| 29_stencil_kernel                 |     16.312 |      0.021 |      2858.00x |         2.28x | PASS     |
+| 30_sci_py_laplacian               |      0.555 |      0.614 |        97.17x |         0.03x | PASS     |
+| 31_pypde                          |      0.290 |      1.175 |        50.84x |         0.52x | PASS     |
+
+Running Heat Equation on 3D Grid 128x128x128...
+
+| Baseline Implementation           | GFLOP/s    | Time (s)     |Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |    481.340 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     14.919 |      0.183 |      2634.10x |      2634.10x | PASS     |
+| 2_numba_reduced_op                |     22.998 |      0.119 |      4060.41x |         1.54x | PASS     |
+| 3_numba_fast_math                 |     18.095 |      0.151 |      3194.74x |         0.79x | PASS     |
+| 4_copy_buffer                     |      6.968 |      0.391 |      1230.17x |         0.39x | PASS     |
+| 5_numba_cached                    |     13.992 |      0.195 |      2470.35x |         2.01x | PASS     |
+| 6_unrolled                        |      4.784 |      0.570 |       844.58x |         0.34x | PASS     |
+| 7_numba_tiling_i16                |     13.901 |      0.196 |      2454.25x |         2.91x | PASS     |
+| 8_numba_tiling_i32                |     14.059 |      0.194 |      2482.17x |         1.01x | PASS     |
+| 9_numba_tiling_i64                |     14.029 |      0.194 |      2476.87x |         1.00x | PASS     |
+| 10_numba_tiling_j16               |     13.643 |      0.200 |      2408.68x |         0.97x | PASS     |
+| 11_numba_tiling_j32               |     13.762 |      0.198 |      2429.80x |         1.01x | PASS     |
+| 12_numba_tiling_j64               |     13.788 |      0.198 |      2434.30x |         1.00x | PASS     |
+| 13_numba_tiling_ij16              |     13.587 |      0.201 |      2398.82x |         0.99x | PASS     |
+| 14_numba_tiling_ij32              |     13.547 |      0.201 |      2391.74x |         1.00x | PASS     |
+| 15_numba_tiling_ij64              |     13.495 |      0.202 |      2382.68x |         1.00x | PASS     |
+| 16_numba_tiling_ijk32             |      4.016 |      0.679 |       709.03x |         0.30x | PASS     |
+| 17_numba_tiling_ij16k32           |      4.158 |      0.656 |       734.09x |         1.04x | PASS     |
+| 18_numba_tiling_ij16k64           |      4.793 |      0.569 |       846.18x |         1.15x | PASS     |
+| 19_numba_tiling_ij8k32            |      4.105 |      0.664 |       724.77x |         0.86x | PASS     |
+| 20_loop_change_jki                |      0.210 |     12.953 |        37.16x |         0.05x | PASS     |
+| 21_loop_change_kji                |      0.282 |      9.654 |        49.86x |         1.34x | PASS     |
+| 22_numba_parallel                 |     67.437 |      0.040 |     11906.34x |       238.79x | PASS     |
+| 23_numba_parallel                 |     67.711 |      0.040 |     11954.72x |         1.00x | PASS     |
+| 24_numba_parallel                 |     81.351 |      0.034 |     14362.87x |         1.20x | PASS     |
+| 25_parallel_tiling                |      3.119 |      0.874 |       550.65x |         0.04x | PASS     |
+| 26_vectorized                     |      0.824 |      3.309 |       145.47x |         0.26x | PASS     |
+| 27_temporal_tiling_2_steps        |      5.839 |      0.467 |      1030.82x |         7.09x | FAIL     |
+| 29_stencil_kernel                 |     17.408 |      0.157 |      3073.52x |         2.98x | PASS     |
+| 30_sci_py_laplacian               |      0.173 |     15.769 |        30.53x |         0.01x | PASS     |
+| 31_pypde                          |      0.719 |      3.792 |       126.93x |         4.16x | PASS     |
+
+Running Heat Equation on 3D Grid 256x256x256...
+
+| Baseline Implementation           | GFLOP/s    | Time (s)     |Abs Speedup  | Rel Speedup  | Correct  |
+| :---| :---| :---| :---| :---| :--- |
+| 0_python_naive                    |      0.006 |   3886.872 |         1.00x |         1.00x | PASS     |
+| 1_numba_niave                     |     15.076 |      1.447 |      2686.70x |      2686.70x | PASS     |
+| 2_numba_reduced_op                |     21.308 |      1.024 |      3797.40x |         1.41x | PASS     |
+| 3_numba_fast_math                 |     18.084 |      1.206 |      3222.85x |         0.85x | PASS     |
+| 4_copy_buffer                     |      7.245 |      3.010 |      1291.17x |         0.40x | PASS     |
+| 5_numba_cached                    |     13.847 |      1.575 |      2467.71x |         1.91x | PASS     |
+| 6_unrolled                        |      4.663 |      4.677 |       830.99x |         0.34x | PASS     |
+| 7_numba_tiling_i16                |     13.901 |      1.569 |      2477.39x |         2.98x | PASS     |
+| 8_numba_tiling_i32                |     13.857 |      1.574 |      2469.48x |         1.00x | PASS     |
+| 9_numba_tiling_i64                |     13.879 |      1.571 |      2473.45x |         1.00x | PASS     |
+| 10_numba_tiling_j16               |     13.589 |      1.605 |      2421.79x |         0.98x | PASS     |
+| 11_numba_tiling_j32               |     13.342 |      1.635 |      2377.68x |         0.98x | PASS     |
+| 12_numba_tiling_j64               |     13.487 |      1.617 |      2403.56x |         1.01x | PASS     |
+| 13_numba_tiling_ij16              |     13.282 |      1.642 |      2366.94x |         0.98x | PASS     |
+| 14_numba_tiling_ij32              |     13.207 |      1.651 |      2353.61x |         0.99x | PASS     |
+| 15_numba_tiling_ij64              |     13.454 |      1.621 |      2397.65x |         1.02x | PASS     |
+| 16_numba_tiling_ijk32             |      3.008 |      7.252 |       535.98x |         0.22x | PASS     |
+| 17_numba_tiling_ij16k32           |      3.056 |      7.137 |       544.60x |         1.02x | PASS     |
+| 18_numba_tiling_ij16k64           |      3.834 |      5.689 |       683.24x |         1.25x | PASS     |
+| 19_numba_tiling_ij8k32            |      3.286 |      6.637 |       585.64x |         0.86x | PASS     |
+| 20_loop_change_jki                |      0.693 |     31.495 |       123.41x |         0.21x | PASS     |
+| 21_loop_change_kji                |      0.483 |     45.170 |        86.05x |         0.70x | PASS     |
+| 22_numba_parallel                 |     25.299 |      0.862 |      4508.53x |        52.39x | PASS     |
+| 23_numba_parallel                 |     25.229 |      0.864 |      4496.19x |         1.00x | PASS     |
+| 24_numba_parallel                 |     25.389 |      0.859 |      4524.54x |         1.01x | PASS     |
+| 25_parallel_tiling                |      2.949 |      7.395 |       525.61x |         0.12x | PASS     |
+| 26_vectorized                     |      0.813 |     26.828 |       144.88x |         0.28x | PASS     |
+| 27_temporal_tiling_2_steps        |      4.473 |      4.876 |       797.09x |         5.50x | FAIL     |
+| 29_stencil_kernel                 |     16.435 |      1.327 |      2928.84x |         3.67x | PASS     |
+| 30_sci_py_laplacian               |      0.417 |     52.311 |        74.30x |         0.03x | PASS     |
+| 31_pypde                          |      1.020 |     21.389 |       181.72x |         2.45x | PASS     |
+Done!
