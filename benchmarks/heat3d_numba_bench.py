@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from numba import njit, prange, stencil
 import numpy as np
 from scipy.ndimage import laplace
+from pde import CartesianGrid, ScalarField, PDEBase
 
 # Set single-threaded execution for external BLAS libraries to ensure reproducible benchmarks
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
@@ -28,7 +29,7 @@ def solve_heat_naive_python_0(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         for i in range(1, nx - 1):
@@ -69,7 +70,7 @@ def solve_heat_numba_1(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         # Explicit 3D Finite Difference via 3-level nested loops
@@ -105,7 +106,7 @@ def solve_heat_numba_reduce_op_1(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         # Explicit 3D Finite Difference via 3-level nested loops
@@ -157,7 +158,7 @@ def solve_heat_numba_caching_1(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         # Explicit 3D Finite Difference via 3-level nested loops
@@ -198,7 +199,7 @@ def solve_heat_numba_unroll(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         # Explicit 3D Finite Difference via 3-level nested loops
@@ -569,7 +570,7 @@ def solve_heat_copy_buffer_2(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps):
         for i in range(1, nx - 1):
@@ -594,7 +595,7 @@ def solve_heat_numba_fast_math_3(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         # Explicit 3D Finite Difference via 3-level nested loops
@@ -644,7 +645,7 @@ def solve_heat_numba_loop_change_jki_4(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         step_loop_jki(T_curr, T_next, r)
@@ -673,7 +674,7 @@ def solve_heat_numba_loop_change_kji(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         step_loop_kji(T_curr, T_next, r)
@@ -709,7 +710,7 @@ def solve_heat_numba_parallel_6(T, steps, r):
     nx, ny, nz = T.shape
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         step_parallel_i(T_curr, T_next, r)
@@ -742,7 +743,7 @@ def solve_heat_numba_parallel_7(T, steps, r):
     nx, ny, nz = T.shape
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         step_parallel_ij(T_curr, T_next, r)
@@ -775,7 +776,7 @@ def solve_heat_numba_parallel_8(T, steps, r):
     nx, ny, nz = T.shape
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps//2):
         step_parallel_ijk(T_curr, T_next, r)
@@ -793,7 +794,7 @@ def solve_heat_numba_vectorized_11(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps // 2):
         
@@ -869,6 +870,93 @@ def solve_heat_numba_tiling_parallel(T, steps, r):
 
     return T_curr
 
+import numpy as np
+from numba import njit, prange
+
+@njit(inline="always", fastmath=False, parallel=True,)
+def temporal_tile_kernel_3d(T_in, T_out, scratch, i0, i1, j0, j1, k0, k1, r):
+    
+    # --- Time Step 1: Copy from global T_in to local scratch and compute step 1 ---
+    for i in prange(i0, i1):
+        for j in range(j0, j1):
+            k_prev = T_in[i, j, k0 - 1]
+            k_curr = T_in[i, j, k0]
+            
+            for k in range(k0, k1):
+                k_next = T_in[i, j, k + 1]
+                # Map global index to local scratch index
+                si = i - i0 + 1
+                sj = j - j0 + 1
+                sk = k - k0 + 1
+                
+                scratch[si, sj, sk] = r * (
+                    T_in[i+1, j, k] - 2.0 * k_curr + T_in[i-1, j, k] +
+                    T_in[i, j+1, k] - 2.0 * k_curr + T_in[i, j-1, k] +
+                    k_next - 2.0 * k_curr + k_prev
+                ) + k_curr
+                
+                k_prev = k_curr
+                k_curr = k_next
+
+    # --- Time Step 2: Compute step 2 from scratch and write to global T_out ---
+    # Note: Spatial bounds shrink by 1 on each side to respect the light-cone dependency
+    for i in prange(i0 + 1, i1 - 1):
+        for j in range(j0 + 1, j1 - 1):
+            si = i - i0 + 1
+            sj = j - j0 + 1
+            
+            sk_prev = scratch[si, sj, 0]
+            sk_curr = scratch[si, sj, 1]
+            
+            for k in range(k0 + 1, k1 - 1):
+                sk_next = scratch[si, sj, sk - k0 + 2]
+                
+                # We need spatial neighbors from scratch at time step 1
+                si_p = (i + 1) - i0 + 1
+                si_m = (i - 1) - i0 + 1
+                sj_p = (j + 1) - j0 + 1
+                sj_m = (j - 1) - j0 + 1
+                sk = k - k0 + 1
+                
+                T_out[i, j, k] = r * (
+                    scratch[si_p, sj, sk] - 2.0 * sk_curr + scratch[si_m, sj, sk] +
+                    scratch[si, sj_p, sk] - 2.0 * sk_curr + scratch[si, sj_m, sk] +
+                    sk_next - 2.0 * sk_curr + sk_prev
+                ) + sk_curr
+                
+                sk_prev = sk_curr
+                sk_curr = sk_next
+
+@njit(fastmath=True)
+def solve_heat_temporal_tiled(T, steps, r):
+    nx, ny, nz = T.shape
+
+    T_curr = T.copy()
+    T_next = T.copy()
+    
+    tile_size = 32
+    
+    # Allocate a small local scratch pad per thread / block workspace
+    # Size fits easily into L2/L3 cache: (tile_size + 2) cubed
+    scratch = np.empty((tile_size + 2, tile_size + 2, tile_size + 2), dtype=T.dtype)
+
+    for step in range(0, steps, 2):
+        # Outer parallel loop over spatial 3D blocks
+        for i0 in range(1, nx - 1, tile_size):
+            i1 = min(i0 + tile_size, nx - 1)
+            for j0 in range(1, ny - 1, tile_size):
+                j1 = min(j0 + tile_size, ny - 1)
+                for k0 in range(1, nz - 1, tile_size):
+                    k1 = min(k0 + tile_size, nz - 1)
+                    
+                    # Execute 2-step temporal block
+                    temporal_tile_kernel_3d(T_curr, T_next, scratch, i0, i1, j0, j1, k0, k1, r)
+                    
+        # Rotate buffers for the next temporal wave
+        T_curr, T_next = T_next, T_curr
+
+    return T_curr
+
 @stencil
 def heat_kernel(arr, r):
     return r * (
@@ -883,7 +971,7 @@ def solve_heat_numba_stencil(T, steps, r):
     
     # Create working buffers
     T_curr = T.copy()
-    T_next = np.zeros((nx, ny, nz), dtype=np.float64)
+    T_next = np.zeros((nx, ny, nz), dtype=T.dtype)
 
     for step in range(steps // 2):
         # Apply stencil with pre-allocated output buffers using 'out='
@@ -909,15 +997,46 @@ def solve_heat_scipy(T, steps, r):
         
     return T_curr
 
+class ExplicitHeat3D(PDEBase):
+    def __init__(self, r, bc={"value": 0.0}):
+        super().__init__()
+        self.r = r
+        self.bc = bc
+
+    def evolution_rate(self, state, t=0):
+        return self.r * state.laplace(bc=self.bc)
+
+def solve_heat_pypde(T_init, steps, r):
+    nx, ny, nz = T_init.shape
+    
+    # 1. Define 3D Cartesian grid with unit spacing (dx = dy = dz = 1.0)
+    grid = CartesianGrid([[0, nx], [0, ny], [0, nz]], [nx, ny, nz], periodic=False)
+    state = ScalarField(grid, data=T_init.copy())
+    
+    # 2. Initialize PDE with Dirichlet boundary condition (T = 0)
+    eq = ExplicitHeat3D(r=r, bc={"value": 0.0})
+    
+    # 3. Use solver="euler" for fixed time-step Forward Euler (dt = 1.0)
+    # Also disable the progress bar (tracker=None) so it doesn't slow down benchmarks
+    result = eq.solve(
+        state, 
+        t_range=steps, 
+        dt=1.0, 
+        solver="euler", 
+        tracker=None
+    )
+    
+    return result.data
+
 # ---------------------------------------------------------
 # Execution & Benchmarking Routine
 # ---------------------------------------------------------
-def run_benchmark(matrix_size=512):
+def run_benchmark(matrix_size=512, data_type=np.float64):
     global N
     N = matrix_size
     Nx = Ny = Nz = N
     # Initial setup of grid
-    T_init = np.zeros((Nx, Ny, Nz), dtype=np.float64)
+    T_init = np.zeros((Nx, Ny, Nz), data_type)
 
     # Place a hot central source
     cx, cy, cz = Nx // 2, Ny // 2, Nz // 2
@@ -933,11 +1052,11 @@ def run_benchmark(matrix_size=512):
     T_reduced =  T_init.copy()
 
     T_expected = solve_heat_scipy(T_init, steps, r)
-    total_flops_reduced = 1 * (N_py ** 3) * 13  #Do just one step for unoptimized program
-    T_expected_reduced = solve_heat_scipy(T_reduced, 1, r)
+    total_flops_reduced = 2 * (N_py ** 3) * 13  #Do just one step for unoptimized program
+    T_expected_reduced = solve_heat_scipy(T_reduced, 2, r)
     total_flops = steps * (N ** 3) * 13 
  
-    def measure(fn, reps=5):
+    def measure(fn, reps=9):
         # Correctness check against reference matrix T_expected
         T_result = fn(T_init, steps, r)
         is_correct = np.allclose(T_result, T_expected, rtol=1e-5, atol=1e-5)
@@ -954,13 +1073,13 @@ def run_benchmark(matrix_size=512):
 
     # 0. Pure Python
     t0 = time.perf_counter()
-    T_result = solve_heat_naive_python_0(T_reduced, 1, r)
+    T_result = solve_heat_naive_python_0(T_reduced, 2, r)
 
     py_elapsed = time.perf_counter() - t0
     py_gflops  = (total_flops_reduced / py_elapsed) / 1e9 
     py_correct = np.allclose(T_result, T_expected_reduced, rtol=1e-5, atol=1e-5)
 
-    results.append(("0_python_naive", py_gflops, py_elapsed, py_correct))
+    results.append(("0_python_naive", py_gflops, py_elapsed*(steps/2), py_correct))
 
     # Baseline functions list
     functions = [
@@ -990,8 +1109,10 @@ def run_benchmark(matrix_size=512):
         ("24_numba_parallel", solve_heat_numba_parallel_8),
         ("25_parallel_tiling", solve_heat_numba_tiling_parallel),
         ("26_vectorized", solve_heat_numba_vectorized_11),
-        ("27_stencil_kernel", solve_heat_numba_stencil),
-        ("28_sci_py_laplacian", solve_heat_scipy),
+        ("27_temporal_tiling_2_steps", solve_heat_temporal_tiled),
+        ("29_stencil_kernel", solve_heat_numba_stencil),
+        ("30_sci_py_laplacian", solve_heat_scipy),
+        ("31_pypde",   solve_heat_pypde),
     ]
 
     for name, fn in functions:
@@ -1005,22 +1126,28 @@ def run_benchmark(matrix_size=512):
 # ---------------------------------------------------------
 if __name__ == "__main__":
     # Get user input for matrix dimension N
-    N_input = 512
+    N_input    = 512
+    float_type = 64
+    data_type  = np.float64
     if len(sys.argv) > 1:
         try:
             N_input = int(sys.argv[1])
         except ValueError:
             N_input = 256
-    if len(sys.argv) > 2:
+    if len(sys.argv) > 2 :
+        if (int(sys.argv[2]) == 32):
+            data_type  = np.float32
+            float_type = 32
+    if len(sys.argv) > 3:
         try:
             img_path = sys.argv[2]
         except ValueError:
             img_path = f"heat3d_benchmark_N{N_input}.png"
     else:
-        img_path = f"heat3d_benchmark_N{N_input}.png"
+        img_path = f"heat3d_benchmark_N{N_input}_float{float_type}.png"
 
     print(f"\nRunning Heat Equation on 3D Grid {N_input}x{N_input}x{N_input}...\n")
-    benchmark_data = run_benchmark(N_input)
+    benchmark_data = run_benchmark(N_input, data_type)
 
     py_elapsed = benchmark_data[0][2]  # Reference execution time for pure Python naive
 
