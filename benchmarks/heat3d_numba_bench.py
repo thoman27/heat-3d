@@ -184,11 +184,11 @@ def step_unroll(T_in, T_out, r):
 
                 T_out[i, j, k] =  r * (T_in[i+1, j, k] - 2.0 * k_curr + T_in[i-1, j, k]
                                      + T_in[i, j+1, k]  - 2.0 * k_curr + T_in[i, j-1, k]
-                                     + k_next  - 2.0 * k_curr + k_prev) + k_curr;
+                                     + k_next  - 2.0 * k_curr + k_prev) + k_curr
 
                 T_out[i, j, k+1] =  r * (T_in[i+1, j, k+1] - 2.0 * k_next + T_in[i-1, j, k+1]
                                       + T_in[i, j+1, k+1]  - 2.0 * k_next + T_in[i, j-1, k+1]
-                                      + k_next_next  - 2.0 * k_next + k_curr) + k_next;
+                                      + k_next_next  - 2.0 * k_next + k_curr) + k_next
 
                 k_curr = k_next_next #Assumes even grid
                 k_prev = k_next

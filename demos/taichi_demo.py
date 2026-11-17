@@ -14,11 +14,11 @@ alpha = 1.17e-4          # Thermal diffusivity (m^2/s) - Copper
 r = alpha * dt / (dx**2) # CFL Stability Criterion for 3D: r <= 1/6 (~0.1667)
 
 # Allocate Taichi fields
-field_a = ti.field(dtype=ti.f32, shape=(N, N, N))
-field_b = ti.field(dtype=ti.f32, shape=(N, N, N))
+field_a = ti.field(dtype=ti.f64, shape=(N, N, N))
+field_b = ti.field(dtype=ti.f64, shape=(N, N, N))
 
 @ti.kernel
-def heat_step(curr: ti.template(), next_gen: ti.template(), r: ti.f32):
+def heat_step(curr: ti.template(), next_gen: ti.template(), r: ti.f64):
     # Using ti.template() allows passing fields dynamically into the kernel
     for i, j, k in ti.ndrange((1, N - 1), (1, N - 1), (1, N - 1)):
         next_gen[i, j, k] = r * (
@@ -29,8 +29,8 @@ def heat_step(curr: ti.template(), next_gen: ti.template(), r: ti.f32):
 
 def solve_heat_taichi(T_host, steps, r):
     # Load initial host data into field_a
-    field_a.from_numpy(np.ascontiguousarray(T_host, dtype=np.float32))
-    field_b.from_numpy(np.ascontiguousarray(T_host, dtype=np.float32))
+    field_a.from_numpy(np.ascontiguousarray(T_host, dtype=np.float64))
+    field_b.from_numpy(np.ascontiguousarray(T_host, dtype=np.float64))
     
     curr = field_a
     next_gen = field_b
@@ -41,7 +41,7 @@ def solve_heat_taichi(T_host, steps, r):
         
     return curr.to_numpy()
 
-T_init = np.zeros((N, N, N), dtype=np.float32)
+T_init = np.zeros((N, N, N), dtype=np.float64)
 
 # Place a hot central source
 cx, cy, cz = N // 2, N // 2, N // 2
